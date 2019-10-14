@@ -1,0 +1,195 @@
+<DOCTYPE! html>
+<html>
+	<head>
+		<title>Tanks</title>
+	</head>
+	<body>
+		<canvas id="game_canvas" width = "750" height = "500" style="border:1px solid #000000;"></canvas>
+		<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+		<script>
+			/*global variables*/
+			HEIGHT = 500;
+			WIDTH = 750;
+			TANK_WIDTH = 10, BARREL_LENGTH = TANK_WIDTH * 2;
+			PROJECTILE_LENGTH = 5, PROJECTILE_V = 5;
+			
+			/*initially set up left down and right to false, the tank
+			shouldn't start out by moving.*/
+			var w = a = s = d = false;
+			var canvas = document.getElementById("game_canvas");
+			var ctx = canvas.getContext("2d");
+			
+			/*make socket*/
+			var socket = io();
+			
+			/* helper method for finding a random number between min and max*/
+			function randomBounds(min, max)
+			{
+				return Math.random()*(max - min) + min;
+			}
+			
+			// *******************************************************
+			// 					EMISSION LISTENERS
+			// *******************************************************
+			socket.on('id', function (data)
+			{
+				/*receive assigned id from server*/
+				socket.id = data.id;
+				console.log("id: " + socket.id);
+			});
+			
+			socket.on('updatingMap', function (data)
+			{
+				/*Calculations for next frame finished, now render
+				them from the server*/
+				renderMap(data);
+			});
+			
+			
+			
+			// ********************************************************
+			//					RENDERING FUNCTIONS
+			// ********************************************************
+
+			function drawTankBody(t)
+			{
+				/*Draw all enemy tanks red, and your tank green*/
+				var color = "red";
+				if (t.id == socket.id)
+					color = "green";
+					
+				ctx.strokeStyle = "#000000";
+				ctx.fillStyle = color;
+				ctx.beginPath();
+				ctx.arc(t.x, t.y, TANK_WIDTH, 0, 2*Math.PI);
+				ctx.closePath();
+				ctx.stroke();
+				ctx.fill();
+			}
+
+			/*Draw the barrel of the given tank, same for all tanks*/
+			function drawBarrel(t)
+			{
+				ctx.moveTo(t.x, t.y);
+				ctx.lineTo(t.barrelx, t.barrely);
+				ctx.closePath();
+				ctx.stroke();
+			}
+
+			/*Draw the tank, first draws barrel, then places tank on top of barrel
+			(simply for aesthetics)*/
+			function renderTank(t)
+			{	
+				drawBarrel(t);	
+				drawTankBody(t);
+			}
+
+			/*Draw the given projectile*/
+			function renderProjectile(p)
+			{
+				ctx.moveTo(p.startx, p.starty);
+				ctx.lineTo(p.endx, p.endy);
+				ctx.closePath();
+				ctx.stroke();
+			}
+
+			/*main rendering function, will loop through all players and
+			projectiles and render each one*/ 
+			function renderMap(data)
+			{
+				/*First clear the current map*/
+				ctx.fillStyle = "#FFFFFF";
+				ctx.fillRect(0, 0, WIDTH, HEIGHT);
+				for (var i in data.players)
+					renderTank(data.players[i]);
+				for (var i in data.projectiles)
+					renderProjectile(data.projectiles[i]);
+			}
+			
+			
+			// ****************************************************
+			//					ACTIONS
+			// ****************************************************
+			
+			/*Key changes*/
+			window.addEventListener("keydown", onKeyDown, false);
+			window.addEventListener("keyup", onKeyUp, false);
+			/*Mouse click*/
+			window.addEventListener("click", fire, false);
+			
+			/*None of the firing mechanism is handled on the client side,
+			all of it is done on the server side, so tell the server that
+			we are attempting to fire.*/
+			function fire () {socket.emit('fire');}
+			
+			canvas.onmousemove = function (mouse)
+			{
+				/*Tell the server that our mouse position has changed,
+				and send the new mouse position.*/
+				socket.emit('mouseMoved', 
+				{
+					x: mouse.clientX, 
+					y: mouse.clientY
+				});
+			}
+
+			function onKeyDown(event)
+			{
+				var key = event.keyCode;
+				switch(key)
+				{
+					case 65:
+						a = true;
+						break;
+					case 68:
+						d = true;
+						break;
+					case 83:
+						s = true;
+						break;
+					case 87:
+						w = true;
+						break;
+				}
+				
+				sendKeys();
+			}
+
+			function onKeyUp(event)
+			{
+				var key = event.keyCode;
+				switch(key)
+				{
+					case 65:
+						a = false;
+						break;
+					case 68:
+						d = false;
+						break;
+					case 83:
+						s = false;
+						break;
+					case 87:
+						w = false;
+						break;
+				}
+				
+				sendKeys();
+			}
+			
+			/*Used by onKeyDown and onKeyUp, sends the booleans
+			associated with each movement key as up, down, left, and right.*/
+			function sendKeys()
+			{
+				socket.emit('keychange',
+				{
+					up: w,
+					left: a,
+					down: s,
+					right: d
+					
+				});
+			}
+		</script>
+	</body>
+</html>
